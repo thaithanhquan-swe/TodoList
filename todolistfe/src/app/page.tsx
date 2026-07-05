@@ -1,65 +1,127 @@
-import Image from "next/image";
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import { Todo, TodoRequest } from "@/types/todo";
+import {
+  createTodo,
+  deleteTodo,
+  getTodos,
+  toggleTodo,
+  updateTodo,
+} from "@/services/todoService";
+import TodoForm from "@/components/TodoForm/TodoForm";
+import TodoFilter from "@/components/TodoFilter/TodoFilter";
+import TodoList from "@/components/TodoList/TodoList";
+import TodoPagination from "@/components/TodoPagination/TodoPagination";
 
 export default function Home() {
+  const [todos, setTodos] = useState<Todo[]>([]);
+  const [editingTodo, setEditingTodo] = useState<Todo | null>(null);
+
+  const [keyword, setKeyword] = useState("");
+  const [searchKeyword, setSearchKeyword] = useState("");
+  const [completed, setCompleted] = useState("all");
+
+  const [page, setPage] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+
+  const fetchTodos = useCallback(
+    async (pageNumber = page) => {
+      const data = await getTodos({
+        keyword: searchKeyword,
+        completed: completed === "all" ? undefined : completed === "completed",
+        page: pageNumber,
+        size: 2,
+        sort: "createdAt,desc",
+      });
+
+      setTodos(data.content);
+      setTotalPages(data.totalPages);
+    },
+    [completed, page, searchKeyword],
+  );
+
+  useEffect(() => {
+    fetchTodos();
+  }, [fetchTodos]);
+
+  async function reloadFirstPage() {
+    if (page === 0) {
+      await fetchTodos(0);
+      return;
+    }
+
+    setPage(0);
+  }
+
+  async function handleSubmit(data: TodoRequest) {
+    if (editingTodo) {
+      await updateTodo(editingTodo.id, {
+        ...data,
+        completed: editingTodo.completed,
+      });
+      setEditingTodo(null);
+    } else {
+      await createTodo(data);
+    }
+
+    await reloadFirstPage();
+  }
+
+  async function handleDelete(id: string) {
+    if (!confirm("Bạn có chắc muốn xóa công việc này không?")) return;
+
+    await deleteTodo(id);
+    await fetchTodos();
+  }
+
+  async function handleToggle(id: string) {
+    await toggleTodo(id);
+    await fetchTodos();
+  }
+
+  function handleSearch() {
+    setSearchKeyword(keyword);
+    setPage(0);
+  }
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+    <main className="min-h-screen bg-gray-100 px-3 py-4 sm:px-6 sm:py-8 lg:py-10">
+      <div className="mx-auto w-full max-w-4xl rounded-lg bg-white p-4 shadow sm:p-6 lg:p-8">
+        <h1 className="mb-5 text-center text-2xl font-bold text-gray-900 sm:mb-6 sm:text-3xl">
+          Todo List
+        </h1>
+
+        <TodoForm
+          editingTodo={editingTodo}
+          onSubmit={handleSubmit}
+          onCancel={() => setEditingTodo(null)}
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+
+        <TodoFilter
+          keyword={keyword}
+          completed={completed}
+          onKeywordChange={setKeyword}
+          onCompletedChange={(value) => {
+            setCompleted(value);
+            setPage(0);
+          }}
+          onSearch={handleSearch}
+        />
+
+        <TodoList
+          todos={todos}
+          onEdit={setEditingTodo}
+          onDelete={handleDelete}
+          onToggle={handleToggle}
+        />
+
+        <TodoPagination
+          page={page}
+          totalPages={totalPages}
+          onPageChange={setPage}
+        />
+      </div>
+    </main>
   );
 }
